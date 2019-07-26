@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TodoListClient", "TodoListC
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TodoListService", "TodoListService\TodoListService.csproj", "{818BC550-0D38-42C4-9B0A-FE5C6B83196C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Common.Auth", "Common.Auth\Common.Auth.csproj", "{71C76FD1-1B26-443E-9726-94C6D92504A8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -44,5 +46,17 @@ Global
 		{818BC550-0D38-42C4-9B0A-FE5C6B83196C}.Release|x64.Build.0 = Release|Any CPU
 		{818BC550-0D38-42C4-9B0A-FE5C6B83196C}.Release|x86.ActiveCfg = Release|Any CPU
 		{818BC550-0D38-42C4-9B0A-FE5C6B83196C}.Release|x86.Build.0 = Release|Any CPU
+		{71C76FD1-1B26-443E-9726-94C6D92504A8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{71C76FD1-1B26-443E-9726-94C6D92504A8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{71C76FD1-1B26-443E-9726-94C6D92504A8}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{71C76FD1-1B26-443E-9726-94C6D92504A8}.Debug|x64.Build.0 = Debug|Any CPU
+		{71C76FD1-1B26-443E-9726-94C6D92504A8}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{71C76FD1-1B26-443E-9726-94C6D92504A8}.Debug|x86.Build.0 = Debug|Any CPU
+		{71C76FD1-1B26-443E-9726-94C6D92504A8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{71C76FD1-1B26-443E-9726-94C6D92504A8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{71C76FD1-1B26-443E-9726-94C6D92504A8}.Release|x64.ActiveCfg = Release|Any CPU
+		{71C76FD1-1B26-443E-9726-94C6D92504A8}.Release|x64.Build.0 = Release|Any CPU
+		{71C76FD1-1B26-443E-9726-94C6D92504A8}.Release|x86.ActiveCfg = Release|Any CPU
+		{71C76FD1-1B26-443E-9726-94C6D92504A8}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
