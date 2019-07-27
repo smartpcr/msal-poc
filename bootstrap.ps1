@@ -3,13 +3,12 @@ param(
     [string]$AppName = "msal-test"
 )
 
-
 $vaultName = "$($AppName)-kv"
 $resourceGroup = "$($AppName)-rg"
 $location = "westus2"
 $spnName = "$($AppName)-spn"
 $spnCert = "$($spnName)-cert"
-
+$containerPort = 5001
 
 $gitRootFolder = if ($PSScriptRoot) { $PSScriptRoot } else { Get-Location }
 while (-not (Test-Path (Join-Path $gitRootFolder ".git"))) {
@@ -76,6 +75,25 @@ $existingAssignments = az role assignment list --assignee $spn.appId --role Owne
 if ($existingAssignments.Count -eq 0) {
     az role assignment create --assignee $spn.appId --role Owner --scope "/subscriptions/$($azAccount.id)" | Out-Null
 }
+
+$replyUrl = "http://localhost:$($containerPort)/signin-oidc"
+Write-Host "6. Register spn auth redirect url [$replyUrl]..." -ForegroundColor Green
+
+if (-not ($spn.replyUrls -contains $replyUrl)) {
+    $replyUrlList = New-Object System.Collections.ArrayList
+    $replyUrlList.AddRange([array]$spn.replyUrls)
+    $replyUrlList.Add($replyUrl) | Out-Null
+
+    $newReplyUrls = ""
+    $replyUrlList | ForEach-Object {
+        $newReplyUrls += " " + $_
+    }
+    az ad app update --id $spn.appId --replyUrls $newReplyUrls
+}
+else {
+    LogInfo -Message "Reply url is already added to service '$($ServiceSetting.service.name)'"
+}
+
 
 $appSettings = @{
     subscriptionId = $azAccount.id

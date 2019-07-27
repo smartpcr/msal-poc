@@ -1,4 +1,6 @@
-namespace Common.Auth
+using System;
+
+namespace Microsoft.Identity.Web
 {
     public class AzureAd
     {
@@ -7,5 +9,6 @@ namespace Common.Auth
         public string ClientCertName { get; set; }
         public string Domain { get; set; }
         public string InstanceId { get; set; }
+        public Uri Authority => new Uri($"https://login.microsoftonline.com/{TenantId}/v2.0");
     }
 }

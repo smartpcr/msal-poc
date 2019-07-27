@@ -47,12 +47,13 @@ namespace Microsoft.Identity.Web
         /// This expects the configuration files will have a section named "AzureAD"
         /// </summary>
         /// <param name="services">Service collection to which to add this authentication scheme</param>
-        /// <param name="configuration">The Configuration object</param>
         /// <returns></returns>
-        public static IServiceCollection AddProtectWebApiWithMicrosoftIdentityPlatformV2(this IServiceCollection services, IConfiguration configuration, X509Certificate2 tokenDecryptionCertificate = null)
+        public static IServiceCollection AddProtectWebApiWithMicrosoftIdentityPlatformV2(this IServiceCollection services)
         {
+            var serviceProvider = services.BuildServiceProvider();
+            var configuration = serviceProvider.GetRequiredService<IConfiguration>();
             services.AddAuthentication(AzureADDefaults.JwtBearerAuthenticationScheme)
-                    .AddAzureADBearer(options => configuration.Bind("AzureAd", options));
+                    .AddAzureADBearer(options => configuration.Bind(nameof(AzureAd), options));
 
             // Add session if you are planning to use session based token cache , .AddSessionTokenCaches()
             services.AddSession();
@@ -63,21 +64,12 @@ namespace Microsoft.Identity.Web
                 // Reinitialize the options as this has changed to JwtBearerOptions to pick configuration values for attributes unique to JwtBearerOptions
                 configuration.Bind("AzureAd", options);
 
-                // This is an Azure AD v2.0 Web API
-                options.Authority += "/v2.0";
-
                 // The valid audiences are both the Client ID (options.Audience) and api://{ClientID}
                 options.TokenValidationParameters.ValidAudiences = new string[] { options.Audience, $"api://{options.Audience}" };
 
                 // Instead of using the default validation (validating against a single tenant, as we do in line of business apps),
                 // we inject our own multi-tenant validation logic (which even accepts both V1 and V2 tokens)
                 options.TokenValidationParameters.IssuerValidator = AadIssuerValidator.GetIssuerValidator(options.Authority).Validate;
-
-                // If you provide a token decryption certificate, it will be used to decrypt the token
-                if (tokenDecryptionCertificate != null)
-                {
-                    options.TokenValidationParameters.TokenDecryptionKey = new X509SecurityKey(tokenDecryptionCertificate);
-                }
 
                 // When an access token for our own Web API is validated, we add it to MSAL.NET's cache so that it can
                 // be used from the controllers.
@@ -87,8 +79,8 @@ namespace Microsoft.Identity.Web
                 options.Events.OnTokenValidated = async context =>
                    {
                        // This check is required to ensure that the Web API only accepts tokens from tenants where it has been consented and provisioned.
-                       if (!context.Principal.Claims.Any(x => x.Type == ClaimConstants.Scope)
-                          && !context.Principal.Claims.Any(y => y.Type == ClaimConstants.Roles))
+                       if (context.Principal.Claims.All(x => x.Type != ClaimConstants.Scope)
+                          && context.Principal.Claims.All(y => y.Type != ClaimConstants.Roles))
                        {
                            throw new UnauthorizedAccessException("Neither scope or roles claim was found in the bearer token.");
                        }
