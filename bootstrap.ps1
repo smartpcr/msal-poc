@@ -1,3 +1,7 @@
+<#
+    the script create a service principal, authenticated with cert, and put cert into key vault
+    service principal is granted owner permission to subscription 
+#>
 param(
     [string]$SubscriptionName = "RRD MSDN Ultimate",
     [string]$AppName = "msal-test"
