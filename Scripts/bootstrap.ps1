@@ -4,7 +4,7 @@
     2) create service principal for each app
     3) create requested resource access for each app
     4) create app roles for each app
-    
+
 #>
 param(
     [string]$SubscriptionName = "RRD MSDN Ultimate",
@@ -44,6 +44,9 @@ $gitRootFolder = if ($PSScriptRoot) { $PSScriptRoot } else { Get-Location }
 while (-not (Test-Path (Join-Path $gitRootFolder ".git"))) {
     $gitRootFolder = Split-Path $gitRootFolder -Parent
 }
+$global:GitRootFolder = $gitRootFolder
+$script:Indent = 2
+
 $scriptFolder = Join-Path $gitRootFolder "Scripts"
 if (-not (Test-Path $scriptFolder)) {
     New-Item $scriptFolder -ItemType Directory -Force | Out-Null
@@ -129,7 +132,7 @@ if (!$userIsAddedAsOwner) {
 Write-Host "6. Ensure aad app [$clientAppName]" -ForegroundColor Green
 [array]$clientAppFound = az ad app list --display-name $clientAppName | ConvertFrom-Json # native app
 if ($null -eq $clientAppFound -or $clientAppFound.Length -eq 0) {
-    $clientApp = az ad app create --display-name $clientAppName --reply-urls "urn:ietf:wg:oauth:2.0:oob" --available-to-other-tenants $true | ConvertFrom-Json
+    $clientApp = az ad app create --display-name $clientAppName --native-app --reply-urls "urn:ietf:wg:oauth:2.0:oob" --available-to-other-tenants $true | ConvertFrom-Json
 
 }
 elseif ($clientAppFound.Length -gt 1) {

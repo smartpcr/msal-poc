@@ -6,7 +6,7 @@ global:
 apps:
   - name: todo-service
     type: web
-    appCertName: todo-service-cert
+    appCert: todo-service-cert
     multitenant: true
     port: 7001
     requestedAccess:
@@ -17,15 +17,18 @@ apps:
           - name: directory_read
     roles:
       - name: todo_read
-        type:
-          - user
-          - application
+        types:
+          - User
+          - Application
+        description: read to do items
       - name: todo_write
-        type:
-          - application
+        types:
+          - User
+          - Application
+        description: write to do items
   - name: todo-client
     type: native
-    appCertName: todo-client-cert
+    appCert: todo-client-cert
     requestedAccess:
       - name: todo-service
         permissions:
@@ -33,7 +36,7 @@ apps:
           - name: todo_write
   - name: todo-web
     type: native
-    appCertName: todo-web-cert
+    appCert: todo-web-cert
     port: 7002
     requestedAccess:
       - name: todo-service
@@ -42,7 +45,7 @@ apps:
           - name: todo_write
   - name: todo-job
     type: native
-    appCertName: todo-job-cert
+    appCert: todo-job-cert
     requestedAccess:
       - name: Microsoft_Graph
         permissions:
