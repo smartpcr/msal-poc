@@ -1,0 +1,52 @@
+global:
+  subscriptionName: RRD MSDN Ultimate
+  resourceGroup: msal-test-rg
+  location: westus2
+  vaultName: msal-test-kv
+apps:
+  - name: todo-service
+    type: web
+    appCertName: todo-service-cert
+    multitenant: true
+    port: 7001
+    requestedAccess:
+      - name: Microsoft_Graph
+        permissions:
+          - name: user_impersonation
+          - name: user_read
+          - name: directory_read
+    roles:
+      - name: todo_read
+        type:
+          - user
+          - application
+      - name: todo_write
+        type:
+          - application
+  - name: todo-client
+    type: native
+    appCertName: todo-client-cert
+    requestedAccess:
+      - name: todo-service
+        permissions:
+          - name: todo_read
+          - name: todo_write
+  - name: todo-web
+    type: native
+    appCertName: todo-web-cert
+    port: 7002
+    requestedAccess:
+      - name: todo-service
+        permissions:
+          - name: todo_read
+          - name: todo_write
+  - name: todo-job
+    type: native
+    appCertName: todo-job-cert
+    requestedAccess:
+      - name: Microsoft_Graph
+        permissions:
+          - name: user_impersonation
+      - name: todo-service
+        permissions:
+          - name: todo_read

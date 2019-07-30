@@ -1,7 +1,10 @@
 <#
-    the script
-    1) create an aad app (allow access from other tenant)
-    2)
+    the script will:
+    1) create an aad app for each app in manifest (apps_manifest.yaml)
+    2) create service principal for each app
+    3) create requested resource access for each app
+    4) create app roles for each app
+    
 #>
 param(
     [string]$SubscriptionName = "RRD MSDN Ultimate",
@@ -168,9 +171,9 @@ Write-Host "9. Create html file for service app and client app" -ForegroundColor
 $htmlFile = "createdApps.html"
 Set-Content -Value "<html><body><table>" -Path $htmlFile
 Add-Content -Value "<thead><tr><th>Application</th><th>AppId</th><th>Url in the Azure portal</th></tr></thead><tbody>" -Path $htmlFile
-$servicePortalUrl = "https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/CallAnAPI/appId/"+$app.AppId+"/objectId/"+$spn.ObjectId+"/isMSAApp/"
+$servicePortalUrl = "https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/CallAnAPI/appId/" + $app.AppId + "/objectId/" + $spn.ObjectId + "/isMSAApp/"
 Add-Content -Value "<tr><td>service</td><td>$($app.appId)</td><td><a href='$servicePortalUrl'>TodoListService (active-directory-dotnet-native-aspnetcore-v2)</a></td></tr>" -Path $htmlFile
-$clientPortalUrl = "https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/CallAnAPI/appId/"+$clientApp.appId+"/objectId/"+$clientSpn.objectId+"/isMSAApp/"
+$clientPortalUrl = "https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/CallAnAPI/appId/" + $clientApp.appId + "/objectId/" + $clientSpn.objectId + "/isMSAApp/"
 Add-Content -Value "<tr><td>client</td><td>$($clientApp.appId)</td><td><a href='$clientPortalUrl'>TodoListClient (active-directory-dotnet-native-aspnetcore-v2)</a></td></tr>" -Path $htmlFile
 
 
