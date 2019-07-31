@@ -39,7 +39,12 @@ function EnsureAadApp() {
         $app = $appFound[0]
     }
     $Global:Apps = if ($Global:Apps) { $Global:Apps } else { New-Object Hashtable }
-    ($Global:Apps).Add($AppSettings.name, $app.appId) | Out-Null
+    if (($Global:Apps).ContainsKey($AppSettings.name)) {
+        ($Global:Apps)[$AppSettings.name] = $app.appId
+    }
+    else {
+        ($Global:Apps).Add($AppSettings.name, $app.appId) | Out-Null
+    }
 
     LogStep -Message "Ensure owner is added to app"
     $userPrincipalName = az ad signed-in-user show --query "userPrincipalName"

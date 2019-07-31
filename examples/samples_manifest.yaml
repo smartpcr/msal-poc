@@ -12,9 +12,9 @@ apps:
     requestedAccess:
       - name: Microsoft_Graph
         permissions:
-          - name: user_impersonation
-          - name: user_read
-          - name: directory_read
+          - name: User_Impersonation
+          - name: UserProfile_Read
+          - name: Directory_Read
     roles:
       - name: todo_read
         types:
