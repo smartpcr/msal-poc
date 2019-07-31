@@ -162,6 +162,26 @@ function EnsureAadApp() {
         $resourceAccessJsonFile = Join-Path $appTempFolder "resourceAccess.json"
         $resourceAccessList | ConvertTo-Json -Depth 4 | Out-File $resourceAccessJsonFile
         az ad app update --id $app.appId --required-resource-accesses @$resourceAccessJsonFile
+
+        [array]$existingOauth2Permissions = az ad app permission list --id $app.appId | ConvertFrom-Json
+        if ($null -ne $existingOauth2Permissions -and $existingOauth2Permissions.Length -gt 0) {
+            $existingOauth2Permissions | ForEach-Object {
+                az ad app permission delete --id $app.appId --api $_.resourceAppId | Out-Null
+            }
+        }
+
+        $resourceAccessList | ForEach-Object {
+            $resourceAppId = $_.resourceAppId
+            $resourceAccess = $_.resourceAccess
+            $resourceAccess | ForEach-Object {
+                $id = $_.id
+                # $type = $_.type
+                # Always use scope for wellknown resource and custom resource
+                az ad app permission add --id $app.appId --api $resourceAppId --api-permissions "$($id)=Scope" | Out-Null
+            }
+
+            az ad app permission grant --id $app.appId --api $resourceAppId --expires 1 | Out-Null
+        }
     }
 
 
