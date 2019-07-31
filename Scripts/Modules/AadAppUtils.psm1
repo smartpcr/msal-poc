@@ -131,7 +131,7 @@ function EnsureAadApp() {
                     if ($null -ne $appRoleFound) {
                         $permissions.Add(@{
                             id   = $appRoleFound.id
-                            type = "Scope"
+                            type = "Role"
                         }) | Out-Null
                     }
                 }
