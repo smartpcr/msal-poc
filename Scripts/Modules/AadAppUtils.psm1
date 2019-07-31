@@ -7,9 +7,6 @@ function EnsureAadApp() {
         [object] $GlobalSettings
     )
 
-    $Script:Indent = if ($Script:Indent) { $Script:Indent + 2 } else { 2 }
-    $Private:Indentation = "".PadLeft($Script:Indent)
-    $Private:Step = 0
     $scriptFolder = Join-Path $global:GitRootFolder "Scripts"
     $credentialFolder = Join-Path $scriptFolder "credential"
     if (-not (Test-Path $credentialFolder)) {
@@ -20,8 +17,8 @@ function EnsureAadApp() {
         New-Item $appTempFolder -ItemType Directory -Force | Out-Null
     }
 
-    Write-Host "$($Private:Indentation)$(++$Private:Step). Ensure aad app [$($AppSettings.name)]..." -ForegroundColor Green
-    [array]$appFound = az ad app list --display-name $AppSettings.name | ConvertFrom-Json # native app
+    LogStep -Message "Ensure aad app [$($AppSettings.name)]..."
+    [array]$appFound = az ad app list --display-name $AppSettings.name | ConvertFrom-Json
     if ($null -eq $appFound -or $appFound.Length -eq 0) {
         if ($AppSettings.type -eq "web") {
             $replyUrl = "http://localhost:$($AppSettings.port)"
@@ -30,7 +27,7 @@ function EnsureAadApp() {
             az ad app update --id $app.appId --identifier-uris $serviceIdentifierUri
             az ad app update --id $app.appId --set publicClient=$false
         }
-        else {
+        else {  # native app
             $replyUrl = "urn:ietf:wg:oauth:2.0:oob"
             $app = az ad app create --display-name $AppSettings.name --native-app --reply-urls $replyUrl | ConvertFrom-Json
         }
@@ -41,8 +38,10 @@ function EnsureAadApp() {
     else {
         $app = $appFound[0]
     }
+    $Global:Apps = if ($Global:Apps) { $Global:Apps } else { New-Object Hashtable }
+    ($Global:Apps).Add($AppSettings.name, $app.appId) | Out-Null
 
-    Write-Host "$($Private:Indentation)$(++$Private:Step). Ensure owner is added to app" -ForegroundColor Green
+    LogStep -Message "Ensure owner is added to app"
     $userPrincipalName = az ad signed-in-user show --query "userPrincipalName"
     $user = az ad user show --upn-or-object-id $userPrincipalName | ConvertFrom-Json
     $userIsAddedAsOwner = $false
@@ -50,7 +49,7 @@ function EnsureAadApp() {
     $owners | ForEach-Object {
         if ($_.objectId -eq $user.objectId) {
             $userIsAddedAsOwner = $true
-            Write-Host "Owner [$userPrincipalName] is added to app [$($AppSettings.name)]: $userIsAddedAsOwner"
+            LogStep "Owner [$userPrincipalName] is added to app [$($AppSettings.name)]: $userIsAddedAsOwner"
         }
     }
 
@@ -59,7 +58,7 @@ function EnsureAadApp() {
     }
 
 
-    Write-Host "$($Private:Indentation)$(++$Private:Step). ensure service principal is created for the app [$($AppSettings.name)]" -ForegroundColor Green
+    LogStep -Message "ensure service principal is created for the app [$($AppSettings.name)]"
     [array]$spnFound = az ad sp list --display-name $AppSettings.name | ConvertFrom-Json
     if ($null -eq $spnFound -or $spnFound.Length -eq 0) {
         $spn = az ad sp create --id $app.appId | ConvertFrom-Json
@@ -70,52 +69,86 @@ function EnsureAadApp() {
     else {
         $spn = $spnFound[0]
     }
-    Write-Host "    service principal: appid=$($spn.appId), objId=$($spn.objectId)"
+    LogStep "service principal: appid=$($spn.appId), objId=$($spn.objectId)"
 
 
-    Write-Host "$($Private:Indentation)$(++$Private:Step). Ensure app cert [$($AppSettings.appCert)] is created in vault [$($GlobalSettings.vaultName)]"
+    LogStep -Message "Ensure app cert [$($AppSettings.appCert)] is created in vault [$($GlobalSettings.vaultName)]"
+    [array]$existingCerts = az keyvault certificate list --vault-name $GlobalSettings.vaultName --query "[?name=='$($AppSettings.appCert)']" | ConvertFrom-Json
+    if ($null -eq $existingCerts -or $existingCerts.Length -eq 0) {
+        $defaultPolicyFile = Join-Path $appTempFolder "default_policy.json"
+        az keyvault certificate get-default-policy -o json | Out-File $defaultPolicyFile -Encoding utf8 -Force | Out-Null
+        $defaultPolicy = Get-Content $defaultPolicyFile | ConvertFrom-Json
+        $defaultPolicy.x509CertificateProperties.subject = "CN=$($AppSettings.name)"
+        $defaultPolicy | ConvertTo-Json -Depth 99 | Out-File $defaultPolicyFile
+        az keyvault certificate create --name $appSettings.appCert --vault-name $GlobalSettings.vaultName -p @$defaultPolicyFile | Out-Null
+    }
     $spnCertFile = Join-Path $appTempFolder "$($AppSettings.appCert).pem"
-    az keyvault certificate download --vault-name $vaultName --name $spnCert -f $spnCertFile
+    if (Test-Path $spnCertFile) {
+        Remove-Item $spnCertFile -Force | Out-Null
+    }
+
     [array]$appCredentials = az ad app credential list --id $app.appId --cert | ConvertFrom-Json
     if ($null -eq $appCredentials -or $appCredentials.Length -eq 0) {
-        az ad app credential reset --id $app.appId --cert @$spnCertFile
+        az keyvault certificate download --vault-name $GlobalSettings.vaultName --name $AppSettings.appCert -f $spnCertFile
+        az ad app credential reset --id $app.appId --cert @$spnCertFile | Out-Null
     }
     else {
         $foundSpnCert = $false
-        $cert = az keyvault certificate show --vault-name $vaultName --name $spnCert | ConvertFrom-Json
+        $cert = az keyvault certificate show --vault-name $GlobalSettings.vaultName --name $AppSettings.appCert | ConvertFrom-Json
         $appCredentials | ForEach-Object {
             if ($_.customKeyIdentifier -eq $cert.x509ThumbprintHex) {
                 $foundSpnCert = $true # TODO: handle expiration
-                Write-Host "cert [$($AppSettings.appCert)] is added to app [$($AppSettings.name)]: $foundSpnCert" -ForegroundColor Green
+                LogStep -Message "cert [$($AppSettings.appCert)] is added to app [$($AppSettings.name)]: $foundSpnCert"
             }
         }
 
         if (!$foundSpnCert) {
-            az ad app credential reset --id $app.appId --cert @$spnCertFile --append
+            az keyvault certificate download --vault-name $GlobalSettings.vaultName --name $AppSettings.appCert -f $spnCertFile
+            az ad app credential reset --id $app.appId --cert @$spnCertFile --append | Out-Null
         }
     }
 
-    Write-Host "$($Private:Indentation)$(++$Private:Step). Ensure requested resource access for app [$($AppSettings.name)]" -ForegroundColor Green
-    $allResources = Get-Content (Join-Path $scriptFolder "azure_resources.json") | ConvertFrom-Json
-    $allPermissions = Get-Content (Join-Path $scriptFolder "permissions.json") | ConvertFrom-Json
+    LogStep -Message "Ensure requested resource access for app [$($AppSettings.name)]"
+    $allResources = Get-Content (Join-Path $scriptFolder "resources.json") | ConvertFrom-Json | ConvertTo-Yaml2 | ConvertFrom-Yaml2 -Ordered
+    $allPermissions = Get-Content (Join-Path $scriptFolder "permissions.json") | ConvertFrom-Json | ConvertTo-Yaml2 | ConvertFrom-Yaml2 -Ordered
     $resourceAccessList = New-Object System.Collections.ArrayList
-    if ($null -ne $AppSettings.requestedAccess -and $AppSettings.requestedAccess.Length -gt 0) {
-        $AppSettings.requestedAccess | ForEach-Object {
+    if ($null -ne $AppSettings.requestedAccess -and $AppSettings.requestedAccess.Count -gt 0) {
+        [array]$AppSettings.requestedAccess | ForEach-Object {
             $resourceName = $_.name
             $resourceId = $allResources[$resourceName]
             $permissions = New-Object System.Collections.ArrayList
-            $_.permissions | ForEach-Object {
-                $permissionName = $_.name
-                $permissionId = $allPermissions[$permissionName]
-                $permissions.Add(@{
-                        id   = $permissionId
-                        type = "Scope"
-                    }) | Out-Null
+            if ($null -eq $resourceId) {
+                $resourceId = ($Global:Apps)[$resourceName]
+                $dependentApp = az ad app show --id $resourceId | ConvertFrom-Json
+                $_.permissions | ForEach-Object {
+                    $permissionName = $_.name
+                    $appRoleFound = $dependentApp.appRoles | Where-Object { $_.value -eq $permissionName }
+                    if ($null -ne $appRoleFound) {
+                        $permissions.Add(@{
+                            id   = $appRoleFound.id
+                            type = "Scope"
+                        }) | Out-Null
+                    }
+                }
             }
-            $resourceAccessList.Add(@{
+            else {
+                $_.permissions | ForEach-Object {
+                    $permissionName = $_.name
+                    $permissionId = $allPermissions[$permissionName]
+                    if ($null -ne $permissionId) {
+                        $permissions.Add(@{
+                            id   = $permissionId
+                            type = "Scope"
+                        }) | Out-Null
+                    }
+                }
+            }
+            if ($null -ne $resourceId -and $permissions.Count -gt 0) {
+                $resourceAccessList.Add(@{
                     resourceAppId  = $resourceId
                     resourceAccess = $permissions
                 }) | Out-Null
+            }
         }
 
         $resourceAccessJsonFile = Join-Path $appTempFolder "resourceAccess.json"
@@ -124,7 +157,7 @@ function EnsureAadApp() {
     }
 
 
-    Write-Host "$($Private:Indentation)$(++$Private:Step). Ensure roles for app [$($AppSettings.name)]" -ForegroundColor Green
+    LogStep -Message "Ensure roles for app [$($AppSettings.name)]"
     if ($null -ne $AppSettings.roles -and $AppSettings.roles.Length -gt 0) {
         $appRoleList = New-Object System.Collections.ArrayList
         $AppSettings.roles | ForEach-Object {
@@ -132,7 +165,7 @@ function EnsureAadApp() {
                     allowedMemberTypes = $_.types
                     description        = $_.description
                     displayName        = $_.name
-                    value              = $_.value
+                    value              = $_.name
                     isEnabled          = $true
                 }) | Out-Null
         }

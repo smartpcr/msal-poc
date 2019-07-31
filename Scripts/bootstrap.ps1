@@ -6,11 +6,75 @@
     4) create app roles for each app
 
 #>
+
 param(
-    [string]$SubscriptionName = "RRD MSDN Ultimate",
-    [string]$AppName = "msal-test"
+    [string]$AppManifestFile = "samples_manifest.yaml"
 )
 
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+$gitRootFolder = if ($PSScriptRoot) { $PSScriptRoot } else { Get-Location }
+while (-not (Test-Path (Join-Path $gitRootFolder ".git"))) {
+    $gitRootFolder = Split-Path $gitRootFolder -Parent
+}
+$global:GitRootFolder = $gitRootFolder
+$script:Indent = 2
+$scriptFolder = Join-Path $gitRootFolder "Scripts"
+$modulesFolder = Join-Path $scriptFolder "Modules"
+$examplesFolder = Join-Path $global:GitRootFolder "examples"
+if (-not (Test-Path $AppManifestFile)) {
+    $AppManifestFile = Join-Path $examplesFolder $AppManifestFile
+}
+if (-not (Test-Path $AppManifestFile)) {
+    throw "Unable to find manifest file [$AppManifestFile]"
+}
+
+Import-Module (Join-Path $modulesFolder "Common.psm1") -Force
+Import-Module (Join-Path $modulesFolder "AadAppUtils.psm1") -Force
+Import-Module (Join-Path $modulesFolder "YamlUtils.psm1") -Force
+
+Initialize
+
+UsingScope ("Login to azure") {
+    $appsSettings = Get-Content $AppManifestFile -Raw | ConvertFrom-Yaml2 -Ordered
+    $globalSettings = $appsSettings.global
+    $azAccount = az account show | ConvertFrom-Json
+    if ($null -eq $azAccount -or $azAccount.name -ine $globalSettings.subscriptionName) {
+        az login | Out-Null
+        az account set --subscription $globalSettings.subscriptionName | Out-Null
+        $azAccount = az account show | ConvertFrom-Json
+    }
+}
+
+UsingScope("Ensure resource group") {
+    [array]$rgFound = az group list --query "[?name=='$($globalSettings.resourceGroup)']" | ConvertFrom-Json
+    if ($null -eq $rgFound -or $rgFound.Length -eq 0) {
+        az group create --name $globalSettings.resourceGroup --location $globalSettings.location | Out-Null
+    }
+}
+
+UsingScope ("Ensure key vault [$($globalSettings.vaultName)]") {
+    [array]$kvFound = az keyvault list --resource-group $globalSettings.resourceGroup --query "[?name=='$($globalSettings.vaultName)']" | ConvertFrom-Json
+    if ($null -eq $kvFound -or $kvFound.Length -eq 0) {
+        az keyvault create `
+            --resource-group $globalSettings.resourceGroup `
+            --name $globalSettings.vaultName `
+            --sku standard `
+            --location $globalSettings.location `
+            --enabled-for-deployment $true `
+            --enabled-for-disk-encryption $true `
+            --enabled-for-template-deployment $true | Out-Null
+    }
+}
+
+$appsSettings.apps | ForEach-Object {
+    $appSettings = $_
+    UsingScope("Ensure app [$($appSettings.name)]") {
+        EnsureAadApp -AppSettings $appSettings -GlobalSettings $globalSettings
+    }
+}
+
+<#
 $vaultName = "$($AppName)-kv"
 $resourceGroup = "$($AppName)-rg"
 $location = "westus2"
@@ -40,14 +104,6 @@ $azureResources = @{
     "Azure_Key_Vault"              = "cfa8b339-82a2-471a-a3c9-0fc0be7a4093"
 }
 
-$gitRootFolder = if ($PSScriptRoot) { $PSScriptRoot } else { Get-Location }
-while (-not (Test-Path (Join-Path $gitRootFolder ".git"))) {
-    $gitRootFolder = Split-Path $gitRootFolder -Parent
-}
-$global:GitRootFolder = $gitRootFolder
-$script:Indent = 2
-
-$scriptFolder = Join-Path $gitRootFolder "Scripts"
 if (-not (Test-Path $scriptFolder)) {
     New-Item $scriptFolder -ItemType Directory -Force | Out-Null
 }
@@ -64,24 +120,6 @@ if ($null -eq $azAccount -or $azAccount.id -ne $SubscriptionId) {
     $azAccount = az account show | ConvertFrom-Json
 }
 
-Write-Host "2. Ensure resource group [$resourceGroup]..." -ForegroundColor Green
-[array]$rgFound = az group list --query "[?name=='$($resourceGroup)']" | ConvertFrom-Json
-if ($null -eq $rgFound -or $rgFound.Length -eq 0) {
-    az group create --name $resourceGroup --location $location | Out-Null
-}
-
-Write-Host "3. Ensure key vault [$vaultName]..." -ForegroundColor Green
-[array]$kvFound = az keyvault list --resource-group $resourceGroup --query "[?name=='$($vaultName)']" | ConvertFrom-Json
-if ($null -eq $kvFound -or $kvFound.Length -eq 0) {
-    az keyvault create `
-        --resource-group $resourceGroup `
-        --name $vaultName `
-        --sku standard `
-        --location $location `
-        --enabled-for-deployment $true `
-        --enabled-for-disk-encryption $true `
-        --enabled-for-template-deployment $true | Out-Null
-}
 
 Write-Host "4. Ensure aad app [$AppName]..." -ForegroundColor Green
 [array]$appFound = az ad app list --display-name $AppName | ConvertFrom-Json # native app
@@ -290,3 +328,4 @@ $clientAppSettings = @{
     vaultName      = $vaultName
 }
 $clientAppSettings | ConvertTo-Json -Depth 4
+#>
