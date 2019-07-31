@@ -78,13 +78,14 @@ function EnsureAadApp() {
 
 
     LogStep -Message "Ensure app cert [$($AppSettings.appCert)] is created in vault [$($GlobalSettings.vaultName)]"
-    [array]$existingCerts = az keyvault certificate list --vault-name $GlobalSettings.vaultName --query "[?name=='$($AppSettings.appCert)']" | ConvertFrom-Json
+    [array]$existingCerts = az keyvault certificate list --vault-name $GlobalSettings.vaultName --query "[?id=='https://$($GlobalSettings.vaultName).vault.azure.net/certificates/$($AppSettings.appCert)']" | ConvertFrom-Json
     if ($null -eq $existingCerts -or $existingCerts.Length -eq 0) {
         $defaultPolicyFile = Join-Path $appTempFolder "default_policy.json"
         az keyvault certificate get-default-policy -o json | Out-File $defaultPolicyFile -Encoding utf8 -Force | Out-Null
         $defaultPolicy = Get-Content $defaultPolicyFile | ConvertFrom-Json
         $defaultPolicy.x509CertificateProperties.subject = "CN=$($AppSettings.name)"
         $defaultPolicy | ConvertTo-Json -Depth 99 | Out-File $defaultPolicyFile
+        LogStep -Message "Creating certificate [$($AppSettings.appCert)] and add to vault [$($GlobalSettings.vaultName)]"
         az keyvault certificate create --name $appSettings.appCert --vault-name $GlobalSettings.vaultName -p @$defaultPolicyFile | Out-Null
     }
     $spnCertFile = Join-Path $appTempFolder "$($AppSettings.appCert).pem"
@@ -94,6 +95,7 @@ function EnsureAadApp() {
 
     [array]$appCredentials = az ad app credential list --id $app.appId --cert | ConvertFrom-Json
     if ($null -eq $appCredentials -or $appCredentials.Length -eq 0) {
+        LogStep -Message "Create new cert [$($AppSettings.appCert)] to app [$($AppSettings.name)]"
         az keyvault certificate download --vault-name $GlobalSettings.vaultName --name $AppSettings.appCert -f $spnCertFile
         az ad app credential reset --id $app.appId --cert @$spnCertFile | Out-Null
     }
@@ -103,11 +105,12 @@ function EnsureAadApp() {
         $appCredentials | ForEach-Object {
             if ($_.customKeyIdentifier -eq $cert.x509ThumbprintHex) {
                 $foundSpnCert = $true # TODO: handle expiration
-                LogStep -Message "cert [$($AppSettings.appCert)] is added to app [$($AppSettings.name)]: $foundSpnCert"
+                LogStep -Message "cert [$($AppSettings.appCert)] is already added to app [$($AppSettings.name)]: $foundSpnCert"
             }
         }
 
         if (!$foundSpnCert) {
+            LogStep -Message "Append cert [$($AppSettings.appCert)] to app [$($AppSettings.name)]"
             az keyvault certificate download --vault-name $GlobalSettings.vaultName --name $AppSettings.appCert -f $spnCertFile
             az ad app credential reset --id $app.appId --cert @$spnCertFile --append | Out-Null
         }
@@ -163,6 +166,15 @@ function EnsureAadApp() {
 
 
     LogStep -Message "Ensure roles for app [$($AppSettings.name)]"
+    if ($null -ne $app.appRoles -and $app.appRoles.Length -gt 0) {
+        [array]$appRolesJson = $app.appRoles
+        $appRolesJson | ForEach-Object {
+            $_.isEnabled = $false
+        }
+        $appRolesOldJsonFile = Join-Path $appTempFolder "appRoles-old.json"
+        $appRolesJson | ConvertTo-Json -Depth 4 | Out-File $appRolesOldJsonFile
+        az ad app update --id $app.appId --app-roles @$appRolesOldJsonFile
+    }
     if ($null -ne $AppSettings.roles -and $AppSettings.roles.Length -gt 0) {
         $appRoleList = New-Object System.Collections.ArrayList
         $AppSettings.roles | ForEach-Object {
